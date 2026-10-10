@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.localai.app.data.engine.ILlmEngine
 import com.localai.app.data.engine.InferenceEvent
 import com.localai.app.data.model.ChatMessage
+import com.localai.app.data.model.CuratedModel
+import com.localai.app.data.model.CuratedModels
 import com.localai.app.data.model.InferenceConfig
 import com.localai.app.data.model.ModelInfo
 import com.localai.app.data.model.Sender
@@ -37,11 +39,17 @@ class ChatViewModel(
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    val curatedModels: List<CuratedModel> = CuratedModels.list
+
     private var inferenceJob: Job? = null
     private var downloadJob: Job? = null
 
     init {
         refreshAvailableModels()
+    }
+
+    fun isModelInstalled(targetFileName: String): Boolean {
+        return modelManager.isModelInstalled(targetFileName)
     }
 
     fun refreshAvailableModels() {
@@ -224,6 +232,10 @@ class ChatViewModel(
         }
     }
 
+    fun downloadCuratedModel(model: CuratedModel) {
+        downloadModel(model.downloadUrl, model.targetFileName)
+    }
+
     fun downloadModel(url: String, fileName: String) {
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {
@@ -247,6 +259,22 @@ class ChatViewModel(
                         )
                     }
                 }
+            }
+        }
+    }
+
+    fun deleteModel(modelInfo: ModelInfo) {
+        viewModelScope.launch {
+            val deleted = modelManager.deleteModel(modelInfo)
+            if (deleted) {
+                if (_uiState.value.activeModel?.filePath == modelInfo.filePath) {
+                    llmEngine.close()
+                    _uiState.update { it.copy(activeModel = null) }
+                }
+                refreshAvailableModels()
+                _uiState.update { it.copy(statusMessage = "Deleted ${modelInfo.name}") }
+            } else {
+                _uiState.update { it.copy(errorMessage = "Could not delete ${modelInfo.name}") }
             }
         }
     }

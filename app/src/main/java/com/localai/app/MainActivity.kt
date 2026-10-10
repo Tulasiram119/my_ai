@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.localai.app.data.engine.MediaPipeLlmInferenceEngine
+import com.localai.app.data.engine.UnifiedLlmEngine
 import com.localai.app.repository.ModelManager
 import com.localai.app.ui.chat.ChatScreen
 import com.localai.app.ui.chat.ChatViewModel
@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val engine = MediaPipeLlmInferenceEngine(applicationContext)
+        val engine = UnifiedLlmEngine(applicationContext)
         val modelManager = ModelManager(applicationContext)
 
         val factory = object : ViewModelProvider.Factory {
