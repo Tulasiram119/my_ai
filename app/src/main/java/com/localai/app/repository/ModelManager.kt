@@ -2,6 +2,7 @@ package com.localai.app.repository
 
 import android.content.Context
 import android.net.Uri
+import com.localai.app.data.model.CuratedModel
 import com.localai.app.data.model.ModelInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +38,7 @@ class ModelManager(
     }
 
     suspend fun getAvailableModels(): List<ModelInfo> = withContext(Dispatchers.IO) {
-        val validExtensions = listOf("bin", "task")
+        val validExtensions = listOf("gguf", "bin", "task")
         val files = modelsDirectory.listFiles { file ->
             file.isFile && validExtensions.contains(file.extension.lowercase())
         } ?: emptyArray()
@@ -52,17 +53,22 @@ class ModelManager(
         }.sortedBy { it.name }
     }
 
+    fun isModelInstalled(targetFileName: String): Boolean {
+        val file = File(modelsDirectory, targetFileName)
+        return file.exists() && file.length() > 0
+    }
+
+    fun downloadCuratedModel(model: CuratedModel): Flow<DownloadProgress> {
+        return downloadModel(model.downloadUrl, model.targetFileName)
+    }
+
     suspend fun importModelFromUri(
         uri: Uri,
         fileName: String,
         onProgress: ((Float) -> Unit)? = null
     ): Result<ModelInfo> = withContext(Dispatchers.IO) {
         runCatching {
-            val sanitizedName = if (fileName.endsWith(".bin", true) || fileName.endsWith(".task", true)) {
-                fileName
-            } else {
-                "$fileName.bin"
-            }
+            val sanitizedName = sanitizeModelFileName(fileName)
             val destinationFile = File(modelsDirectory, sanitizedName)
             val inputStream: InputStream = context.contentResolver.openInputStream(uri)
                 ?: throw IllegalArgumentException("Cannot open stream for URI: $uri")
@@ -107,11 +113,7 @@ class ModelManager(
     }
 
     fun downloadModel(urlStr: String, destinationFileName: String): Flow<DownloadProgress> = flow {
-        val sanitizedName = if (destinationFileName.endsWith(".bin", true) || destinationFileName.endsWith(".task", true)) {
-            destinationFileName
-        } else {
-            "$destinationFileName.bin"
-        }
+        val sanitizedName = sanitizeModelFileName(destinationFileName)
         val destinationFile = File(modelsDirectory, sanitizedName)
         val tempFile = File(modelsDirectory, "$sanitizedName.download")
 
@@ -123,17 +125,38 @@ class ModelManager(
                 readTimeout = 30000
                 instanceFollowRedirects = true
                 requestMethod = "GET"
+                // Hugging Face direct resolve user agent
+                setRequestProperty("User-Agent", "LocalAI-Android/1.0")
             }
 
             val responseCode = connection.responseCode
-            if (responseCode !in 200..299) {
+            // Follow redirects if not handled automatically
+            if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                responseCode == 307 || responseCode == 308) {
+                val newUrl = connection.getHeaderField("Location")
+                if (newUrl != null) {
+                    connection.disconnect()
+                    val redirectedConn = (URL(newUrl).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                        instanceFollowRedirects = true
+                        requestMethod = "GET"
+                        setRequestProperty("User-Agent", "LocalAI-Android/1.0")
+                    }
+                    connection = redirectedConn
+                }
+            }
+
+            val finalResponseCode = connection.responseCode
+            if (finalResponseCode !in 200..299) {
                 emit(
                     DownloadProgress(
                         bytesDownloaded = 0,
                         totalBytes = 0,
                         percent = 0f,
                         isComplete = false,
-                        error = "HTTP error $responseCode: ${connection.responseMessage}"
+                        error = "HTTP error $finalResponseCode: ${connection.responseMessage}"
                     )
                 )
                 return@flow
@@ -213,6 +236,15 @@ class ModelManager(
             file.delete()
         } else {
             false
+        }
+    }
+
+    private fun sanitizeModelFileName(fileName: String): String {
+        val lower = fileName.lowercase()
+        return if (lower.endsWith(".gguf") || lower.endsWith(".bin") || lower.endsWith(".task")) {
+            fileName
+        } else {
+            "$fileName.gguf"
         }
     }
 }

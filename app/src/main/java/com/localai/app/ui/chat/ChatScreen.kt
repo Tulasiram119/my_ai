@@ -23,12 +23,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -61,7 +63,6 @@ import androidx.compose.ui.unit.sp
 import com.localai.app.ui.models.ModelManagerDialog
 import com.localai.app.ui.settings.InferenceSettingsDialog
 import com.localai.app.ui.theme.AccentGreen
-import com.localai.app.ui.theme.AccentRed
 import com.localai.app.ui.theme.DarkBackground
 import com.localai.app.ui.theme.DarkPrimary
 import com.localai.app.ui.theme.DarkSurface
@@ -142,7 +143,7 @@ fun ChatScreen(
                                             if (uiState.activeModel != null) AccentGreen else Color.Gray,
                                             CircleShape
                                         )
-                                    )
+                                )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = uiState.activeModel?.name ?: "No model loaded",
@@ -158,8 +159,8 @@ fun ChatScreen(
                 navigationIcon = {
                     IconButton(onClick = { showModelDialog = true }) {
                         Icon(
-                            imageVector = Icons.Default.Layers,
-                            contentDescription = "Models",
+                            imageVector = Icons.Default.Explore,
+                            contentDescription = "Explore Models",
                             tint = Color.White
                         )
                     }
@@ -250,6 +251,7 @@ fun ChatScreen(
     if (showModelDialog) {
         ModelManagerDialog(
             availableModels = uiState.availableModels,
+            curatedModels = viewModel.curatedModels,
             activeModel = uiState.activeModel,
             downloadProgress = uiState.downloadProgress,
             onDismiss = { showModelDialog = false },
@@ -257,15 +259,24 @@ fun ChatScreen(
                 viewModel.loadModel(it)
                 showModelDialog = false
             },
+            onDeleteModel = {
+                viewModel.deleteModel(it)
+            },
             onImportModel = { uri, fileName ->
                 viewModel.importModel(uri, fileName)
                 showModelDialog = false
             },
-            onDownloadModel = { url, fileName ->
+            onDownloadCuratedModel = {
+                viewModel.downloadCuratedModel(it)
+            },
+            onDownloadCustomModel = { url, fileName ->
                 viewModel.downloadModel(url, fileName)
             },
             onCancelDownload = {
                 viewModel.cancelDownload()
+            },
+            isModelInstalled = {
+                viewModel.isModelInstalled(it)
             }
         )
     }
@@ -321,7 +332,7 @@ fun EmptyChatWelcome(
             text = if (isModelLoaded) {
                 "Your on-device model is ready.\nAll processing happens 100% locally on your phone without sending any data to the cloud."
             } else {
-                "No local model is loaded yet.\nTap below to select or import your Gemma / Phi model (.bin or .task)."
+                "No local model is loaded yet.\nTap below to explore and download Qwen 2.5, Llama 3.2, or import your own GGUF weights."
             },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -330,26 +341,26 @@ fun EmptyChatWelcome(
 
         if (!isModelLoaded) {
             Spacer(modifier = Modifier.height(20.dp))
-            Card(
+            Button(
                 onClick = onOpenModels,
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                colors = ButtonDefaults.buttonColors(containerColor = DarkPrimary)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Layers,
+                        imageVector = Icons.Default.CloudDownload,
                         contentDescription = null,
-                        tint = DarkPrimary,
+                        tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Choose or Import Model",
+                        text = "Explore & Download Models",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }

@@ -2,15 +2,20 @@ package com.localai.app.ui.chat
 
 import com.localai.app.data.engine.ILlmEngine
 import com.localai.app.data.engine.InferenceEvent
+import com.localai.app.data.model.CuratedModels
 import com.localai.app.data.model.InferenceConfig
 import com.localai.app.data.model.ModelInfo
 import com.localai.app.data.model.Sender
+import com.localai.app.repository.DownloadProgress
 import com.localai.app.repository.ModelManager
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -40,7 +45,7 @@ class ChatViewModelTest {
         modelManager = mockk(relaxed = true)
 
         coEvery { modelManager.getAvailableModels() } returns listOf(
-            ModelInfo("test-model.bin", "/models/test-model.bin", 1024L)
+            ModelInfo("test-model.gguf", "/models/test-model.gguf", 1024L)
         )
 
         viewModel = ChatViewModel(llmEngine, modelManager)
@@ -56,14 +61,20 @@ class ChatViewModelTest {
     fun initialState_loadsAvailableModels() = runTest {
         val state = viewModel.uiState.value
         assertEquals(1, state.availableModels.size)
-        assertEquals("test-model.bin", state.availableModels[0].name)
+        assertEquals("test-model.gguf", state.availableModels[0].name)
         assertNull(state.activeModel)
         assertFalse(state.isGenerating)
     }
 
     @Test
+    fun curatedModels_exposesQwenAndOtherModels() {
+        assertTrue(viewModel.curatedModels.isNotEmpty())
+        assertTrue(viewModel.curatedModels.any { it.id.contains("qwen") })
+    }
+
+    @Test
     fun loadModel_success_setsActiveModel() = runTest {
-        val model = ModelInfo("test-model.bin", "/models/test-model.bin", 1024L)
+        val model = ModelInfo("test-model.gguf", "/models/test-model.gguf", 1024L)
         coEvery { llmEngine.loadModel(model.filePath, any()) } returns Result.success(Unit)
 
         viewModel.loadModel(model)
@@ -73,6 +84,35 @@ class ChatViewModelTest {
         assertNotNull(state.activeModel)
         assertEquals(model.name, state.activeModel?.name)
         assertTrue(state.activeModel?.isLoaded == true)
+    }
+
+    @Test
+    fun downloadCuratedModel_startsDownload() = runTest {
+        val curated = CuratedModels.list.first()
+        every { modelManager.downloadModel(curated.downloadUrl, curated.targetFileName) } returns flowOf(
+            DownloadProgress(0, 100, 0f, false)
+        )
+
+        viewModel.downloadCuratedModel(curated)
+        advanceUntilIdle()
+
+        coVerify { modelManager.downloadModel(curated.downloadUrl, curated.targetFileName) }
+    }
+
+    @Test
+    fun deleteModel_removesModelAndClearsActiveIfMatched() = runTest {
+        val model = ModelInfo("test-model.gguf", "/models/test-model.gguf", 1024L, isLoaded = true)
+        coEvery { modelManager.deleteModel(model) } returns true
+        coEvery { llmEngine.loadModel(any(), any()) } returns Result.success(Unit)
+
+        viewModel.loadModel(model)
+        advanceUntilIdle()
+        assertEquals(model.name, viewModel.uiState.value.activeModel?.name)
+
+        viewModel.deleteModel(model)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.activeModel)
     }
 
     @Test
