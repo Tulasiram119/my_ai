@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Local AI</string>
+    <string name="no_model_selected">No model loaded</string>
+    <string name="prompt_placeholder">Ask anything to local AI…</string>
+    <string name="send">Send</string>
+    <string name="stop">Stop</string>
+    <string name="select_model">Select Model</string>
+    <string name="import_model">Import .bin / .task</string>
+    <string name="download_model">Download Model</string>
+    <string name="settings">Inference Settings</string>
+</resources>
